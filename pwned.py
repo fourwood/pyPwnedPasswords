@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
+import argparse
 from hashlib import sha1
 import pandas as pd
 import requests
+
 
 def getBadPasswords(df):
     badPWs = []
@@ -22,8 +24,13 @@ def getBadPasswords(df):
             badPWs.append(row['Title'])
     return badPWs
 
+
 if __name__ == "__main__":
-    filename = 'pwn.csv'
+    parser = argparse.ArgumentParser(description='Check password database for \
+                                     breached passwords.')
+    parser.add_argument('filename', type=str)
+    args = parser.parse_args()
+    filename = args.filename
 
     url = 'https://api.pwnedpasswords.com/range/'
 
@@ -32,9 +39,12 @@ if __name__ == "__main__":
 
     badPWs = getBadPasswords(pwnDF)
     if badPWs:
-        print("Bad news, some of your passwords are compromised. The following entries in your database matched in the PwnedPasswords database:")
+        print("Bad news! Some of your passwords are compromised. " +
+              "The following entries in your database were found in the " +
+              "PwnedPasswords database:")
         for badPW in badPWs:
             print(badPW)
     else:
-        print("Success! None of your passwords showed up in the PwnedPasswords database!")
+        print("Success! None of your passwords showed up in the " +
+              "PwnedPasswords database!")
     del pwnDF

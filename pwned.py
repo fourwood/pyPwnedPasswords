@@ -24,7 +24,7 @@ def unlockDatabase(dbPath, keyFilePath=None):
             version = root[0][0].text
             if version == '1.00':
                 key = root[1][0].text
-        except:
+        except ET.ParseError:
             # Non-XML keys are unsupported at this time
             print("Keyfile wasn't a KeePass XML keyfile. Igorning keyfile.")
 

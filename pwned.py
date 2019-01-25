@@ -8,7 +8,7 @@ import requests
 import struct
 import xml.etree.ElementTree as ET
 
-from Kdbx import Kdbx, Kdbx3, Kdbx4, KdbxHeader
+from Kdbx import Kdbx3, Kdbx4
 
 
 def unlockDatabase(dbPath, keyFilePath=None):

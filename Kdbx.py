@@ -5,21 +5,24 @@ from hashlib import sha256
 import struct
 import xml.etree.ElementTree as ET
 
+
 class CipherId(Enum):
     AES256 = 0x31c1f2e6bf714350be5805216afc5aff
 
+
 class HeaderField(Enum):
-    END           =  0
-    COMMENT       =  1
-    CIPHERID      =  2
-    COMPRESSION   =  3
-    MASTERSEED    =  4
-    TRANSFORMSEED =  5
-    ROUNDS        =  6
-    ENCRYPTIONIV  =  7
-    STREAMKEY     =  8
-    STARTBYTES    =  9
+    END = 0
+    COMMENT = 1
+    CIPHERID = 2
+    COMPRESSION = 3
+    MASTERSEED = 4
+    TRANSFORMSEED = 5
+    ROUNDS = 6
+    ENCRYPTIONIV = 7
+    STREAMKEY = 8
+    STARTBYTES = 9
     INNERSTREAMID = 10
+
 
 class KdbxHeader:
     def __init__(self):
@@ -51,13 +54,15 @@ class KdbxHeader:
             elif bId == HeaderField.CIPHERID:
                 self.cipherId = bData
             elif bId == HeaderField.COMPRESSION:
-                self.isCompressed = bool(int.from_bytes(bData, byteorder='little'))
+                self.isCompressed = bool(int.from_bytes(bData,
+                                                        byteorder='little'))
             elif bId == HeaderField.MASTERSEED:
                 self.masterSeed = bData
             elif bId == HeaderField.TRANSFORMSEED:
                 self.transformSeed = bData
             elif bId == HeaderField.ROUNDS:
-                self.transformRounds = int.from_bytes(bData, byteorder='little')
+                self.transformRounds = int.from_bytes(bData,
+                                                      byteorder='little')
             elif bId == HeaderField.ENCRYPTIONIV:
                 self.encryptIV = bData
             elif bId == HeaderField.STREAMKEY:
@@ -206,9 +211,7 @@ class Kdbx3(Kdbx):
         for _ in range(self.header.transformRounds):
             transformKey = cipher.encrypt(transformKey)
         transformKey = sha256(transformKey).digest()
-        masterSeed = hex(int.from_bytes(self.header.masterSeed, byteorder='little'))[2]
-        masterKey = \
-            sha256(self.header.masterSeed+transformKey)
+        masterKey = sha256(self.header.masterSeed+transformKey)
 
         if int(self.header.cipherId.hex(), base=16) == CipherId.AES256.value:
             context = AES.new(masterKey.digest(),
@@ -226,11 +229,13 @@ class Kdbx3(Kdbx):
         offset = 0
         blocks = b''
         while offset < len(gzipPayload):
-            blockId = int.from_bytes(gzipPayload[offset:offset+4], byteorder='little')
+            blockId = int.from_bytes(gzipPayload[offset:offset+4],
+                                     byteorder='little')
             offset += 4
             sHash = gzipPayload[offset:offset+32]
             offset += 32
-            blockSize = int.from_bytes(gzipPayload[offset:offset+4], byteorder='little')
+            blockSize = int.from_bytes(gzipPayload[offset:offset+4],
+                                       byteorder='little')
             offset += 4
             blockData = gzipPayload[offset:offset+blockSize]
             offset += blockSize
@@ -242,7 +247,7 @@ class Kdbx3(Kdbx):
                 continue
 
             if self.header.isCompressed:
-                wbits = zlib.MAX_WBITS | 16 # gzip format
+                wbits = zlib.MAX_WBITS | 16  # gzip format
                 blockData = zlib.decompress(blockData, wbits=wbits)
 
             blocks += blockData

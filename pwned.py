@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+from Cryptodome.Cipher import Salsa20
 from getpass import getpass
 from hashlib import sha1, sha256
 import requests
@@ -60,11 +61,16 @@ def unlockDatabase(dbPath, keyFilePath=None):
     return db
 
 
-def getBadPasswords(db):
+def getBadPasswords(encryptedPasswords, key):
+    iv = bytes.fromhex("e830094b97205d2a")
+    s20 = Salsa20.new(key=sha256(key).digest(), nonce=iv)
+
     badPWs = []
-    """
-    for index, row in db.iterrows():
-        pwHash = sha1(row['Password'].encode()).hexdigest().upper()
+    for encPW in encryptedPasswords:
+        encPWbytes = base64.b64decode(encPW)
+        zeros = b'\x00' * len(encPWbytes)
+        zerosEnc = s20.encrypt(zeros)
+        pwHash = sha1(bytes([a ^ b for a, b in zip(encPWbytes, zerosEnc)])).hexdigest().upper()
         firstFive = pwHash[:5]
         remainder = pwHash[5:]
 
@@ -76,8 +82,9 @@ def getBadPasswords(db):
             h, n = line.split(':')
             hashCounts[h] = int(n)
         if remainder in hashCounts:
-            badPWs.append(row['Title'])
-    """
+            print(encPW)
+            badPWs.append(encPW)
+
     return badPWs
 
 
@@ -92,10 +99,22 @@ if __name__ == "__main__":
 
     db = unlockDatabase(args.filename, args.key)
 
+    # TODO: protected entries (e.g. passwords) may still be encrypted at rest
+    rootGroup = db.xml.find('Root').find('Group')
+    entries = []
+    entries.extend(rootGroup.findall('Entry'))
+    for group in rootGroup.findall('Group'):
+        entries.extend(group.findall('Entry'))
+
+    encryptedPasswords = []
+    for entry in entries:
+        encryptedPasswords.extend([s.find('Value').text for s in
+                                  entry.findall('String')
+                                  if s.find('Key').text == 'Password'])
+
     url = 'https://api.pwnedpasswords.com/range/'
 
-    """
-    badPWs = getBadPasswords(db)
+    badPWs = getBadPasswords(encryptedPasswords, db.header.streamKey)
     if badPWs:
         print("Bad news! Some of your passwords are compromised. " +
               "The following entries in your database were found in the " +
@@ -105,5 +124,8 @@ if __name__ == "__main__":
     else:
         print("Success! None of your passwords showed up in the " +
               "PwnedPasswords database!")
+
+    del encryptedPasswords
+    del entries
+    del rootGroup
     del db
-    """

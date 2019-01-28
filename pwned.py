@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+from collections import OrderedDict
 from Cryptodome.Cipher import Salsa20
 from getpass import getpass
 from hashlib import sha1, sha256
@@ -66,14 +67,17 @@ def getBadPasswords(encryptedPasswords, key):
     s20 = Salsa20.new(key=sha256(key).digest(), nonce=iv)
 
     badPWs = []
-    for encPW in encryptedPasswords:
-        encPWbytes = base64.b64decode(encPW)
-        zeros = b'\x00' * len(encPWbytes)
+    for site, field, value in encryptedPasswords:
+        encValue = base64.b64decode(value)
+        zeros = b'\x00' * len(encValue)
         zerosEnc = s20.encrypt(zeros)
-        pwHash = sha1(bytes([a ^ b for a, b in zip(encPWbytes, zerosEnc)])).hexdigest().upper()
+        if field != 'Password':
+            continue
+        pwHash = sha1(bytes([a ^ b for a, b in zip(encValue, zerosEnc)])).hexdigest().upper()
         firstFive = pwHash[:5]
         remainder = pwHash[5:]
 
+        url = 'https://api.pwnedpasswords.com/range/'
         reqUrl = url + firstFive
         req = requests.get(reqUrl)
         lines = req.text.split('\r\n')
@@ -82,50 +86,44 @@ def getBadPasswords(encryptedPasswords, key):
             h, n = line.split(':')
             hashCounts[h] = int(n)
         if remainder in hashCounts:
-            print(encPW)
-            badPWs.append(encPW)
+            badPWs.append(site)
 
     return badPWs
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Check password database for \
-                                     breached passwords.')
+    parser = argparse.ArgumentParser(description="Check KeePass database for" +
+                                     " breached passwords.")
     parser.add_argument('filename', type=str)
-    parser.add_argument('-k', '--key', help='Database key file path',
+    parser.add_argument('-k', '--key', help="Database key file path",
                         type=str)
     args = parser.parse_args()
     filename = args.filename
 
+    # TODO: Maybe refactor unlocking more into the db class?
     db = unlockDatabase(args.filename, args.key)
 
-    # TODO: protected entries (e.g. passwords) may still be encrypted at rest
+    # NOTE: protected entries (e.g. passwords) may still be encrypted at rest
     rootGroup = db.xml.find('Root').find('Group')
-    entries = []
-    entries.extend(rootGroup.findall('Entry'))
-    for group in rootGroup.findall('Group'):
-        entries.extend(group.findall('Entry'))
+    sites = [v.text for v in rootGroup.findall('.//Value[@Protected="True"]/../../String[Key="Title"]/Value')]
+    protFields = [v.text for v in rootGroup.findall('.//Value[@Protected="True"]/../Key')]
+    protValues = [v.text for v in rootGroup.findall('.//Value[@Protected="True"]')]
+    protEntries = ((s, f, v) for s, f, v in zip(sites, protFields, protValues) if v)
 
-    encryptedPasswords = []
-    for entry in entries:
-        encryptedPasswords.extend([s.find('Value').text for s in
-                                  entry.findall('String')
-                                  if s.find('Key').text == 'Password'])
-
-    url = 'https://api.pwnedpasswords.com/range/'
-
-    badPWs = getBadPasswords(encryptedPasswords, db.header.streamKey)
-    if badPWs:
-        print("Bad news! Some of your passwords are compromised. " +
-              "The following entries in your database were found in the " +
+    badPWsites = getBadPasswords(protEntries, db.header.streamKey)
+    if badPWsites:
+        print("Bad news! Some of your passwords are compromised!")
+        print("The following entries in your database were found in the " +
               "PwnedPasswords database:")
-        for badPW in badPWs:
-            print(badPW)
+        for site in badPWsites:
+            print(f"- {site}")
+        print("(n.b. These sites may be deleted entries or have the " +
+              "vulnerable password stored in their history!)")
     else:
         print("Success! None of your passwords showed up in the " +
               "PwnedPasswords database!")
 
-    del encryptedPasswords
-    del entries
+    del protValues
+    del protEntries
     del rootGroup
     del db

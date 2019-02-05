@@ -25,12 +25,12 @@ def unlockDatabase(dbPath, keyFilePath=None):
             root = keyTree.getroot()
             version = root[0][0].text
             if version == '1.00':
-                key = root[1][0].text
+                key = base64.b64decode(root[1][0].text)
         except ET.ParseError:
-            # Non-XML keys are unsupported at this time
-            print("Keyfile wasn't a KeePass XML keyfile. Igorning keyfile.")
+            with open(keyFilePath, 'rb') as keyFile:
+                key = sha256(keyFile.read()).digest()
 
-    compositeKey = pwHash+base64.b64decode(key) if key else pwHash
+    compositeKey = pwHash+key if key else pwHash
     compositeKey = sha256(compositeKey).digest()
 
     db = None

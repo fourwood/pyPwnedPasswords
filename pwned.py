@@ -8,6 +8,7 @@ from getpass import getpass
 from hashlib import sha1, sha256
 import requests
 import struct
+import sys
 import xml.etree.ElementTree as ET
 
 from Kdbx import Kdbx3, Kdbx4
@@ -53,7 +54,7 @@ def unlockDatabase(dbPath, keyFilePath=None):
             return None
 
         db.compositeKey = compositeKey
-        db.header.load(dbFile)
+        db.header.load(dbFile, db.headerFieldSize)
         db.load(dbFile)
 
         if not db.payload:
@@ -102,6 +103,10 @@ if __name__ == "__main__":
 
     # TODO: Maybe refactor unlocking more into the db class?
     db = unlockDatabase(args.filename, args.key)
+
+    if not db:
+        print("Failed to open password database!")
+        sys.exit(1)
 
     # NOTE: protected entries (e.g. passwords) may still be encrypted at rest
     rootGroup = db.xml.find('Root').find('Group')

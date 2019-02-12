@@ -22,6 +22,8 @@ class HeaderField(Enum):
     STREAMKEY = 8
     STARTBYTES = 9
     INNERSTREAMID = 10
+    KDFPARAMS = 11
+    CUSTOMDATA = 12
 
 
 class KdbxHeader:
@@ -37,14 +39,26 @@ class KdbxHeader:
         self._streamKey = None
         self._startBytes = None
         self._innerStreamId = None
+        self._KdfParams = None
+        self._customData = None
 
-    def load(self, fileHandle):
+    def load(self, fileHandle, fieldSize):
         bId = None
+        if fieldSize == 2:
+            fieldFmt = 'H'
+        elif fieldSize == 4:
+            fieldFmt = 'I'
+
         while bId != HeaderField.END:
+            print("{")
             bId = ord(struct.unpack('c', fileHandle.read(1))[0])
+            print(bId)
             bId = HeaderField(bId)
-            wSize = int(struct.unpack('H', fileHandle.read(2))[0])
+            wSize = int(struct.unpack(fieldFmt, fileHandle.read(fieldSize))[0])
+            print(wSize)
             bData = fileHandle.read(wSize)
+            print(bData)
+            print("}")
 
             if bId == HeaderField.END:
                 # End of header
@@ -71,6 +85,10 @@ class KdbxHeader:
                 self.startBytes = bData
             elif bId == HeaderField.INNERSTREAMID:
                 self.innerStreamId = int.from_bytes(bData, byteorder='little')
+            elif bId == HeaderField.KDFPARAMS:
+                self.KdfParams = bData
+            elif bId == HeaderField.CUSTOMDATA:
+                self.customData = bData
             else:
                 # Error
                 print("Error parsing database header!")
@@ -165,8 +183,27 @@ class KdbxHeader:
     def innerStreamId(self, value):
         self._innerStreamId = value
 
+    @property
+    def KdfParams(self):
+        return self._KdfParams
+
+    @KdfParams.setter
+    def KdfParams(self, value):
+        self._KdfParams = value
+
+    @property
+    def customData(self):
+        return self._customData
+
+    @customData.setter
+    def customData(self, value):
+        self._customData = value
+
 
 class Kdbx:
+    sig1 = 0x9aa2d903
+    sig2 = 0xb54bfb67
+
     def __init__(self):
         self._header = KdbxHeader()
         self._compositeKey = None
@@ -198,8 +235,7 @@ class Kdbx:
 
 
 class Kdbx3(Kdbx):
-    sig1 = 0x9aa2d903
-    sig2 = 0xb54bfb67
+    headerFieldSize = 2
 
     def __init__(self):
         super().__init__()
@@ -271,6 +307,8 @@ class Kdbx3(Kdbx):
 
 
 class Kdbx4(Kdbx):
+    headerFieldSize = 4
+
     def __init__(self):
         super().__init__()
 

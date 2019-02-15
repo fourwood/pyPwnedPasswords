@@ -5,9 +5,12 @@ from hashlib import sha256
 import struct
 import xml.etree.ElementTree as ET
 
+import base64
 
 class CipherId(Enum):
+    AES128 = 0x61ab05a1946441c38d743a563df8dd35
     AES256 = 0x31c1f2e6bf714350be5805216afc5aff
+    CHACHA20 = 0xd6038a2b8b6f4cb5a524339a31dbb59a
 
 
 class HeaderField(Enum):
@@ -39,7 +42,7 @@ class KdbxHeader:
         self._streamKey = None
         self._startBytes = None
         self._innerStreamId = None
-        self._KdfParams = None
+        self._kdfParams = None
         self._customData = None
 
     def load(self, fileHandle, fieldSize):
@@ -50,15 +53,11 @@ class KdbxHeader:
             fieldFmt = 'I'
 
         while bId != HeaderField.END:
-            print("{")
             bId = ord(struct.unpack('c', fileHandle.read(1))[0])
-            print(bId)
             bId = HeaderField(bId)
+            print(bId)
             wSize = int(struct.unpack(fieldFmt, fileHandle.read(fieldSize))[0])
-            print(wSize)
             bData = fileHandle.read(wSize)
-            print(bData)
-            print("}")
 
             if bId == HeaderField.END:
                 # End of header
@@ -66,7 +65,7 @@ class KdbxHeader:
             elif bId == HeaderField.COMMENT:
                 continue
             elif bId == HeaderField.CIPHERID:
-                self.cipherId = bData
+                self.cipherId = CipherId(int(bData.hex(), base=16))
             elif bId == HeaderField.COMPRESSION:
                 self.isCompressed = bool(int.from_bytes(bData,
                                                         byteorder='little'))
@@ -86,7 +85,9 @@ class KdbxHeader:
             elif bId == HeaderField.INNERSTREAMID:
                 self.innerStreamId = int.from_bytes(bData, byteorder='little')
             elif bId == HeaderField.KDFPARAMS:
-                self.KdfParams = bData
+                self.kdfParams = bData
+                print("kdfParams")
+                # TODO: Parse KDF params
             elif bId == HeaderField.CUSTOMDATA:
                 self.customData = bData
             else:
@@ -184,12 +185,12 @@ class KdbxHeader:
         self._innerStreamId = value
 
     @property
-    def KdfParams(self):
-        return self._KdfParams
+    def kdfParams(self):
+        return self._kdfParams
 
-    @KdfParams.setter
-    def KdfParams(self, value):
-        self._KdfParams = value
+    @kdfParams.setter
+    def kdfParams(self, value):
+        self._kdfParams = value
 
     @property
     def customData(self):
@@ -249,7 +250,10 @@ class Kdbx3(Kdbx):
         transformKey = sha256(transformKey).digest()
         masterKey = sha256(self.header.masterSeed+transformKey)
 
-        if int(self.header.cipherId.hex(), base=16) == CipherId.AES256.value:
+        if self.header.cipherId == CipherId.AES128:
+            print("AES128 cipher not implemented.")
+            return None
+        elif self.header.cipherId == CipherId.AES256:
             context = AES.new(masterKey.digest(),
                               AES.MODE_CBC,
                               iv=self.header.encryptIV)
@@ -260,6 +264,8 @@ class Kdbx3(Kdbx):
             else:
                 # Failed to properly decrypt
                 return None
+        elif self.header.cipherId == CipherID.CHACHA20:
+            print("ChaCha20!")
 
     def _decompressPayload(self, gzipPayload):
         offset = 0
